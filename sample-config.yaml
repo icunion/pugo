@@ -1,0 +1,20 @@
+newerpol:
+  name: 'eActivities'
+  host: 'hostname.example.com'
+  instance: 'instance_name'
+  username: 'login'
+  password: 'password'
+  database: 'database_name'
+cdb:
+  path: /path/to/icu-cdb
+  branch: production
+  author:
+    name: pugo
+    email: 'pugo@example.com'
+email:
+  host: 'localhost'
+  port: 25
+  resources_path: '/path/to/res'
+  sender:
+    name: 'Imperial College Union Sysadmins'
+    email: 'sender@example.com'
