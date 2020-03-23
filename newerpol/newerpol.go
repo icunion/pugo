@@ -21,6 +21,10 @@ type AccessRecord struct {
 	CSP           string
 }
 
+type GetGrantsOptions struct {
+	IncludeNonPending bool
+}
+
 // These are the statuses from dbo.WebserverAccessStatii
 const (
 	AccessGrantPending  = 1
@@ -41,7 +45,7 @@ const grantsLookupQuery = `SELECT dbo.WebserverAccess.ID AS accessid,
 	INNER JOIN dbo.Websites ON dbo.WebserverAccess.WebsiteID = dbo.Websites.ID
 	INNER JOIN dbo.AllCentres ON dbo.Websites.OCID = dbo.AllCentres.OCID
 	INNER JOIN dbo.PeopleLookup ON dbo.WebserverAccess.PeopleId = dbo.PeopleLookup.ID
-	WHERE dbo.WebserverAccess.RequestStatus = ?
+	WHERE dbo.WebserverAccess.RequestStatus IN (?)
 	AND Login IS NOT NULL`
 
 const grantPendingToGrantedQuery = `UPDATE dbo.WebserverAccess SET RequestStatus = 2,
@@ -75,12 +79,20 @@ func Connect() (*sqlx.DB, error) {
 }
 
 // Get grants to add
-func GetGrantsToAdd(db *sqlx.DB) (map[int][]AccessRecord, error) {
+func GetGrantsToAdd(db *sqlx.DB, opts *GetGrantsOptions) (map[int][]AccessRecord, error) {
 	accessRecordsByWebsite := make(map[int][]AccessRecord)
 
-	rows, err := db.Queryx(db.Rebind(grantsLookupQuery), AccessGrantPending)
+	states := []int{AccessGrantPending}
+	if opts.IncludeNonPending {
+		states = append(states, AccessGranted)
+	}
+	query, args, err := sqlx.In(grantsLookupQuery, states)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("newerpol: Performing grantsLookupQuery IN subsitution: %v", err)
+	}
+	rows, err := db.Queryx(db.Rebind(query), args...)
+	if err != nil {
+		return nil, fmt.Errorf("newerpol: Performing grantsLookupQuery: %v", err)
 	}
 	defer rows.Close()
 
@@ -96,12 +108,20 @@ func GetGrantsToAdd(db *sqlx.DB) (map[int][]AccessRecord, error) {
 }
 
 // Get grants to remove
-func GetGrantsToRevoke(db *sqlx.DB) (map[int][]AccessRecord, error) {
+func GetGrantsToRevoke(db *sqlx.DB, opts *GetGrantsOptions) (map[int][]AccessRecord, error) {
 	accessRecordsByWebsite := make(map[int][]AccessRecord)
 
-	rows, err := db.Queryx(db.Rebind(grantsLookupQuery), AccessRevokePending)
+	states := []int{AccessRevokePending}
+	if opts.IncludeNonPending {
+		states = append(states, AccessRevoked)
+	}
+	query, args, err := sqlx.In(grantsLookupQuery, states)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("newerpol: Performing grantsLookupQuery IN subsitution: %v", err)
+	}
+	rows, err := db.Queryx(db.Rebind(query), args...)
+	if err != nil {
+		return nil, fmt.Errorf("newerpol: Performing grantsLookupQuery: %v", err)
 	}
 	defer rows.Close()
 
@@ -116,16 +136,20 @@ func GetGrantsToRevoke(db *sqlx.DB) (map[int][]AccessRecord, error) {
 	return accessRecordsByWebsite, nil
 }
 
+func (a *AccessRecord) IsPending() bool {
+	return a.RequestStatus == AccessGrantPending || a.RequestStatus == AccessRevokePending
+}
+
 // Move a grant from a pending state to a done state. Returns whether the grant updated and any error
-func FinishGrant(grant AccessRecord, db *sqlx.DB) (bool, error) {
-	if grant.RequestStatus == AccessGranted || grant.RequestStatus == AccessRevoked {
-		return false, fmt.Errorf("newerpol: Cannot finish grant, already in finished state: %+v", grant)
+func (a *AccessRecord) FinishGrant(db *sqlx.DB) (bool, error) {
+	if a.RequestStatus == AccessGranted || a.RequestStatus == AccessRevoked {
+		return false, fmt.Errorf("newerpol: Cannot finish grant, already in finished state: %+v", a)
 	}
 
 	var stmt *sql.Stmt
 	var err error
 
-	if grant.RequestStatus == AccessGrantPending {
+	if a.RequestStatus == AccessGrantPending {
 		if grantPendingToGrantedQueryPrepared == nil {
 			grantPendingToGrantedQueryPrepared, err = db.Prepare(db.Rebind(grantPendingToGrantedQuery))
 			if err != nil {
@@ -143,9 +167,9 @@ func FinishGrant(grant AccessRecord, db *sqlx.DB) (bool, error) {
 		stmt = revokePendingToRevokedQueryPrepared
 	}
 
-	result, err := stmt.Exec(grant.AccessId, grant.RequestStatus)
+	result, err := stmt.Exec(a.AccessId, a.RequestStatus)
 	if err != nil {
-		return false, fmt.Errorf("newerpol: Finishing grant %+v: %v", grant, err)
+		return false, fmt.Errorf("newerpol: Finishing grant %+v: %v", a, err)
 	}
 
 	if ra, _ := result.RowsAffected(); ra == 0 {

@@ -129,9 +129,14 @@ func CommitSites(opts *CommitSitesOptions) error {
 		}
 	}
 
-	log.Infof("cdb: %d changed sites saved to working tree", sitesChanged)
+	if !opts.DryRun || opts.ForceUpdateTree {
+		log.Infof("cdb: %d changed sites saved to working tree", sitesChanged)
+	} else {
+		log.Infof("cdb: Dry run, %d changed sites not saved to working tree", sitesChanged)
+	}
 
 	// Stage files
+	stagedFiles := 0
 	if !opts.DryRun {
 		log.Debug("cdb: Staging files")
 		for fn := range filesToStage {
@@ -139,15 +144,16 @@ func CommitSites(opts *CommitSitesOptions) error {
 			if _, err := wt.Add(fn); err != nil {
 				return fmt.Errorf("cdb: Staging %s: %v", fn, err)
 			}
+			stagedFiles++
 		}
 	}
 
 	// If working tree is clean after staging files don't bother to commit
 	if err := checkWorktreeClean(wt); err == nil {
-		if sitesChanged == 0 {
+		if stagedFiles == 0 {
 			log.Info("cdb: Working tree is clean, skipping commit")
 		} else {
-			log.Warnf("cdb: Working tree is clean after staging %s sites, skipping commit")
+			log.Warnf("cdb: Working tree is clean after staging %d sites, skipping commit", stagedFiles)
 		}
 		return nil
 	}

@@ -27,6 +27,7 @@ be updated and the users in question notified.`,
 }
 
 type syncOptions struct {
+	all               bool
 	dryRun            bool
 	forceUpdateTree   bool
 	noPush            bool
@@ -39,6 +40,7 @@ var syncOpts syncOptions
 func init() {
 	rootCmd.AddCommand(syncCmd)
 
+	syncCmd.Flags().BoolVar(&syncOpts.all, "all", false, "Sync all grants, including ones that have already been processed.")
 	syncCmd.Flags().BoolVar(&syncOpts.dryRun, "dry-run", false, "Perform dry run: don't commit to cdb, update Newerpol, or send emails.")
 	syncCmd.Flags().BoolVar(&syncOpts.forceUpdateTree, "force-update-tree", false, "Force the cdb tree to be updated when performing a dry run (e.g. to inspect changes in repo before manually committing).")
 	syncCmd.Flags().BoolVar(&syncOpts.noPush, "no-push", false, "Don't push to origin after committing. Implied by dry-run.")
@@ -57,9 +59,13 @@ func doSync(cmd *cobra.Command) error {
 	}
 	defer newerpolDb.Close()
 
+	getGrantsOpts := &newerpol.GetGrantsOptions{
+		IncludeNonPending: syncOpts.all,
+	}
+
 	grants := make(map[string]map[int][]newerpol.AccessRecord)
 	// Get grants to add grouped by site id
-	grants["add"], err = newerpol.GetGrantsToAdd(newerpolDb)
+	grants["add"], err = newerpol.GetGrantsToAdd(newerpolDb, getGrantsOpts)
 	if err != nil {
 		log.Fatal(fmt.Errorf("sync: ", err))
 	}
@@ -68,7 +74,7 @@ func doSync(cmd *cobra.Command) error {
 	}).Debug("sync: Got grants to add")
 
 	// Get grants to revoke grouped by site id
-	grants["revoke"], err = newerpol.GetGrantsToRevoke(newerpolDb)
+	grants["revoke"], err = newerpol.GetGrantsToRevoke(newerpolDb, getGrantsOpts)
 	if err != nil {
 		log.Fatal(fmt.Errorf("sync: ", err))
 	}
@@ -124,7 +130,9 @@ func doSync(cmd *cobra.Command) error {
 						log.Debugf("sync: %s changed", site.Name())
 						siteIdsChanged <- site.Id
 					}
-					grantsProcessed <- accessRecord
+					if accessRecord.IsPending() {
+						grantsProcessed <- accessRecord
+					}
 				}
 				wg.Done()
 			}(verb, site, grantRecords)
@@ -189,7 +197,7 @@ func doSync(cmd *cobra.Command) error {
 			continue
 		}
 
-		updated, err := newerpol.FinishGrant(accessRecord, newerpolDb)
+		updated, err := accessRecord.FinishGrant(newerpolDb)
 		if err != nil {
 			log.Fatalf("sync: %v", err)
 		}
