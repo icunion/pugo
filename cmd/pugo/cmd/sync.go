@@ -28,8 +28,6 @@ be updated and the users in question notified.`,
 
 type syncOptions struct {
 	all               bool
-	dryRun            bool
-	forceUpdateTree   bool
 	noPush            bool
 	noEmail           bool
 	recipientOverride string
@@ -41,9 +39,6 @@ func init() {
 	rootCmd.AddCommand(syncCmd)
 
 	syncCmd.Flags().BoolVar(&syncOpts.all, "all", false, "Sync all grants, including ones that have already been processed.")
-	syncCmd.Flags().BoolVar(&syncOpts.dryRun, "dry-run", false, "Perform dry run: don't commit to cdb, update Newerpol, or send emails.")
-	syncCmd.Flags().BoolVar(&syncOpts.forceUpdateTree, "force-update-tree", false, "Force the cdb tree to be updated when performing a dry run (e.g. to inspect changes in repo before manually committing).")
-	syncCmd.Flags().BoolVar(&syncOpts.noPush, "no-push", false, "Don't push to origin after committing. Implied by dry-run.")
 	syncCmd.Flags().BoolVar(&syncOpts.noEmail, "no-email", false, "Don't send emails. Implied by dry-run.")
 	syncCmd.Flags().StringVar(&syncOpts.recipientOverride, "recipient-override-email", "", "If set, sends all generated emails to the specified address instead of the real recipients.")
 	syncCmd.Flags().String("branch", "master", "Commit to the named branch instead of the default or config specified branch.")
@@ -154,24 +149,24 @@ func doSync(cmd *cobra.Command) error {
 		Ids:             siteIdsToCommit,
 		Message:         "Update admins",
 		Cmd:             "sync",
-		DryRun:          syncOpts.dryRun,
-		ForceUpdateTree: syncOpts.forceUpdateTree,
-		NoPush:          syncOpts.noPush,
+		DryRun:          globalOpts.dryRun,
+		ForceUpdateTree: globalOpts.forceUpdateTree,
+		NoPush:          globalOpts.noPush,
 	}
 	log.WithFields(log.Fields{
 		"Ids":             siteIdsToCommit,
 		"Message":         "Update admins",
 		"Cmd":             "sync",
-		"DryRun":          syncOpts.dryRun,
-		"ForceUpdateTree": syncOpts.forceUpdateTree,
-		"NoPush":          syncOpts.noPush,
+		"DryRun":          globalOpts.dryRun,
+		"ForceUpdateTree": globalOpts.forceUpdateTree,
+		"NoPush":          globalOpts.noPush,
 	}).Debugf("sync: Committing sites")
 	if err = cdb.CommitSites(commitOpts); err != nil {
 		log.Fatalf("sync: %v", err)
 	}
 
 	// Update eActivities and email user when access granted
-	sendEmails := !syncOpts.dryRun && !syncOpts.noEmail
+	sendEmails := !globalOpts.dryRun && !syncOpts.noEmail
 	if sendEmails {
 		if syncOpts.recipientOverride != "" {
 			log.Infof("sync: Email override in effect - all emails will be sent to %s", syncOpts.recipientOverride)
@@ -190,7 +185,7 @@ func doSync(cmd *cobra.Command) error {
 			"accessRecord": accessRecord,
 		}).Debug("sync: Finishing grant")
 
-		if syncOpts.dryRun {
+		if globalOpts.dryRun {
 			log.WithFields(log.Fields{
 				"accessRecord": accessRecord,
 			}).Debug("sync: Dry run, skipping newerpol.FinishGrant")

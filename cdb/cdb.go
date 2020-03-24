@@ -37,6 +37,7 @@ type sitesCacheStruct struct {
 	byName    map[string]*Site
 	initOnce  sync.Once
 	initError error
+	slice     []*Site
 }
 
 var sitesCache sitesCacheStruct
@@ -211,6 +212,14 @@ func CommitSites(opts *CommitSitesOptions) error {
 	return nil
 }
 
+func GetAllSites() ([]*Site, error) {
+	if err := ensureSitesCacheLoaded(); err != nil {
+		return nil, err
+	}
+
+	return sitesCache.slice, nil
+}
+
 func GetSiteById(id int) (*Site, error) {
 	if err := ensureSitesCacheLoaded(); err != nil {
 		return nil, err
@@ -346,6 +355,7 @@ func initSitesCache() error {
 		if it.site != nil {
 			sitesCache.byId[it.site.Id] = it.site
 			sitesCache.byName[it.site.name] = it.site
+			sitesCache.slice = append(sitesCache.slice, it.site)
 		}
 	}
 

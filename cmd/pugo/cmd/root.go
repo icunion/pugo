@@ -10,9 +10,17 @@ import (
 	"github.com/spf13/viper"
 )
 
+type globalOptions struct {
+	dryRun          bool
+	forceUpdateTree bool
+	noPush          bool
+}
+
 var cfgFile string
 var LogQuiet bool
 var LogVerbose bool
+
+var globalOpts globalOptions
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -46,6 +54,10 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.pugo.yaml)")
 	rootCmd.PersistentFlags().BoolVarP(&LogQuiet, "quiet", "q", false, "quiet output (warnings only). Ignored if verbose is enabled.")
 	rootCmd.PersistentFlags().BoolVarP(&LogVerbose, "verbose", "v", false, "verbose output (debug level)")
+
+	rootCmd.PersistentFlags().BoolVar(&globalOpts.dryRun, "dry-run", false, "Perform dry run: don't commit to cdb, update Newerpol, or send emails.")
+	rootCmd.PersistentFlags().BoolVar(&globalOpts.forceUpdateTree, "force-update-tree", false, "Force the cdb tree to be updated when performing a dry run (e.g. to inspect changes in repo before manually committing).")
+	rootCmd.PersistentFlags().BoolVar(&globalOpts.noPush, "no-push", false, "Don't push to origin after committing. Implied by dry-run.")
 }
 
 // initConfig reads in config file and ENV variables if set.

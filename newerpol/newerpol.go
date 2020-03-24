@@ -58,6 +58,10 @@ const revokePendingToRevokedQuery = `UPDATE dbo.WebserverAccess SET RequestStatu
 	WHERE dbo.WebserverAccess.ID = ?
 	AND dbo.WebserverAccess.RequestStatus = ?`
 
+const managedSitesLookupQuery = `SELECT dbo.Websites.ID AS id
+	FROM dbo.Websites
+	WHERE Deleted = 0`
+
 var grantPendingToGrantedQueryPrepared *sql.Stmt
 var revokePendingToRevokedQueryPrepared *sql.Stmt
 
@@ -134,6 +138,17 @@ func GetGrantsToRevoke(db *sqlx.DB, opts *GetGrantsOptions) (map[int][]AccessRec
 	}
 
 	return accessRecordsByWebsite, nil
+}
+
+// Get IDs of all sites managed in eActivities
+func GetManagedSiteIds(db *sqlx.DB) ([]int, error) {
+	var siteIds []int
+
+	if err := db.Select(&siteIds, managedSitesLookupQuery); err != nil {
+		return nil, fmt.Errorf("newerpol: Performing managedSitesLookupQuery: %v", err)
+	}
+
+	return siteIds, nil
 }
 
 func (a *AccessRecord) IsPending() bool {
