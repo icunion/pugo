@@ -23,12 +23,11 @@ type Site struct {
 	Expiry         string
 	Paths          []string
 	Domains        []interface{} `yaml:"domains,omitempty"`
-	Disabled       bool
+	Disabled       bool `yaml:"disabled,omitempty"`
 	DisabledReason string `yaml:"disabled_reason,omitempty"`
-	Php            bool
-	PhpVersion     int `yaml:"php-version,omitempty"`
-	Passenger      bool
-	Subpaths       bool
+	Php            interface{} `yaml:"php,omitempty"`
+	Passenger      bool `yaml:"passenger,omitempty"`
+	Subpaths       bool `yaml:"subpaths,omitempty"`
 	name           string
 	mu             sync.Mutex
 	changed        bool
