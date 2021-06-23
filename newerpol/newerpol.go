@@ -33,6 +33,9 @@ const (
 	AccessRevoked       = 4
 )
 
+// The grants lookup query ignores rows where a newer record exists for a
+// given person and website so old revocations don't clobber new grants when
+// non-pending grants / revocations are included in the sync
 const grantsLookupQuery = `SELECT dbo.WebserverAccess.ID AS accessid,
 	dbo.WebserverAccess.WebsiteId AS websiteid,
 	dbo.WebserverAccess.RequestStatus AS requeststatus,
@@ -46,7 +49,14 @@ const grantsLookupQuery = `SELECT dbo.WebserverAccess.ID AS accessid,
 	INNER JOIN dbo.AllCentres ON dbo.Websites.OCID = dbo.AllCentres.OCID
 	INNER JOIN dbo.PeopleLookup ON dbo.WebserverAccess.PeopleId = dbo.PeopleLookup.ID
 	WHERE dbo.WebserverAccess.RequestStatus IN (?)
-	AND Login IS NOT NULL`
+	AND Login IS NOT NULL
+	AND NOT EXISTS (
+		SELECT 1
+		FROM WebserverAccess newer
+		WHERE newer.PeopleID = dbo.WebserverAccess.PeopleID
+		AND newer.WebsiteID = dbo.WebserverAccess.WebsiteID
+		AND newer.SubmittedWhen > dbo.WebserverAccess.SubmittedWhen
+	)`
 
 const grantPendingToGrantedQuery = `UPDATE dbo.WebserverAccess SET RequestStatus = 2,
 	GrantedWhen = GETDATE()
